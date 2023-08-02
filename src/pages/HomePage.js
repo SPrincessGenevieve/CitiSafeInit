@@ -6,6 +6,7 @@ import LogOutButton from '../components/LogOutButton';
 import ImagePicker from 'react-native-image-crop-picker';
 import axios from 'axios';
 import Clipboard from '@react-native-clipboard/clipboard';
+import TextRecognition from 'react-native-text-recognition';
 
 const DEFAULT_HEIGHT = 1200;
 const DEFAULT_WITH = 600;
@@ -28,83 +29,64 @@ export default function HomePage({ onPress }) {
     setIsLoading(true);
 
     try {
-      const apiKey = 'K82216846188957'; // Replace with your OCRSpace API key
-      const apiUrl = 'https://api.ocr.space/parse/image';
+      const recognizedText = await TextRecognition.recognize(path);
 
-      const formData = new FormData();
-      formData.append('file', {
-        uri: path,
-        type: 'image/jpeg',
-        name: 'image.jpg',
-      });
-      formData.append('apikey', apiKey);
-      formData.append('isOverlayRequired', 'false');
+      const values = {
+        name: extractValue(/Last Name, First Name, Middle Name\n(.*?)(?:\n|$)/s, recognizedText),
+        nationality: extractValue(/Nationality\n(.*?)(?:\n|$)/s, recognizedText),
+        sex: extractValue(/Sex\n(.*?)(?:\n|$)/s, recognizedText),
+        dob: extractValue(/Date of Birth\n(.*?)(?:\n|$)/s, recognizedText),
+        weight: extractValue(/Weight \(kg\)\n(.*?)(?:\n|$)/s, recognizedText),
+        height: extractValue(/Height\(m\)\n(.*?)(?:\n|$)/s, recognizedText),
+        address: extractValue(/Address\n(.*?)(?:\n|$)/s, recognizedText),
+        licenseNo: extractValue(/License No\.\n(.*?)(?:\n|$)/s, recognizedText),
+        expirationDate: extractValue(/Expiration Date\n(.*?)(?:\n|$)/s, recognizedText),
+        agencyCode: extractValue(/Agency Code\n(.*?)(?:\n|$)/s, recognizedText),
+        bloodType: extractValue(/Blood Type\n(.*?)(?:\n|$)/s, recognizedText),
+        eyeColor: extractValue(/Eyes Color\n(.*?)(?:\n|$)/s, recognizedText),
+        dlCodes: extractValue(/DL Codes\n(.*?)(?:\n|$)/s, recognizedText),
+        condition: extractValue(/Condition\n(.*?)(?:\n|$)/s, recognizedText),
+      };
 
-      const response = await axios.post(apiUrl, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Validate and format the values
+      const formattedValues = {
+        name: values.name.length > 5 ? values.name : 'Not found',
+        nationality: values.nationality === 'PHL' ? values.nationality : 'Not found',
+        sex: ['F', 'M'].includes(values.sex) ? values.sex : 'Not found',
+        dob: /^\d{4}\/\d{2}\/\d{2}$/.test(values.dob) ? values.dob : 'Not found',
+        weight: /^\d+(\.\d+)?$/.test(values.weight) ? values.weight : 'Not found',
+        height: /^\d+(\.\d+)?$/.test(values.height) ? values.height : 'Not found',
+        address: values.address || 'Not found',
+        licenseNo: formatLicenseNo(values.licenseNo),
+        expirationDate: /^\d{4}\/\d{2}\/\d{2}$/.test(values.expirationDate) ? values.expirationDate : 'Not found',
+        agencyCode: formatAgencyCode(values.agencyCode),
+        bloodType: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].includes(values.bloodType)
+          ? values.bloodType
+          : 'Not found',
+        eyeColor: ['Brown', 'Blue', 'Green', 'Hazel', 'Gray', 'Amber'].includes(values.eyeColor)
+          ? values.eyeColor
+          : 'Not found',
+        dlCodes: validateDLCodes(values.dlCodes) ? values.dlCodes : 'Not found',
+        condition: validateCondition(values.condition) ? values.condition : 'Not found',
+      };
 
-      const { data } = response;
-
-      if (data && data.ParsedResults && data.ParsedResults.length > 0) {
-        const recognizedText = data.ParsedResults[0].ParsedText;
-        const lines = recognizedText.split('\n');
-        const values = {};
-
-        // Regular expressions to search for relevant patterns
-        const nameRegex = /Last Name, First Name, Middle Name\n(.*?)(?:\n|$)/s;
-        const nationalityRegex = /Nationality\n(.*?)(?:\n|$)/s;
-        const sexRegex = /Sex\n(.*?)(?:\n|$)/s;
-        const dobRegex = /Date of Birth\n(.*?)(?:\n|$)/s;
-        const weightRegex = /Weight \(kg\)\n(.*?)(?:\n|$)/s;
-        const heightRegex = /Height\(m\)\n(.*?)(?:\n|$)/s;
-        const addressRegex = /Address\n(.*?)(?:\n|$)/s;
-        const licenseNoRegex = /License No\.\n(.*?)(?:\n|$)/s;
-        const expirationDateRegex = /Expiration Date\n(.*?)(?:\n|$)/s;
-        const agencyCodeRegex = /Agency Code\n(.*?)(?:\n|$)/s;
-        const bloodTypeRegex = /Blood Type\n(.*?)(?:\n|$)/s;
-        const eyeColorRegex = /Eyes Color\n(.*?)(?:\n|$)/s;
-        const dlCodesRegex = /DL Codes\n(.*?)(?:\n|$)/s;
-        const conditionRegex = /Condition\n(.*?)(?:\n|$)/s;
-
-        // Extracting the matched values
-        const name = extractValue(nameRegex, lines);
-        const nationality = extractValue(nationalityRegex, lines);
-        const sex = extractValue(sexRegex, lines);
-        const dob = extractValue(dobRegex, lines);
-        const weight = extractValue(weightRegex, lines);
-        const height = extractValue(heightRegex, lines);
-        const address = extractValue(addressRegex, lines);
-        const licenseNo = extractValue(licenseNoRegex, lines);
-        const expirationDate = extractValue(expirationDateRegex, lines);
-        const agencyCode = extractValue(agencyCodeRegex, lines);
-        const bloodType = extractValue(bloodTypeRegex, lines);
-        const eyeColor = extractValue(eyeColorRegex, lines);
-        const dlCodes = extractValue(dlCodesRegex, lines);
-        const condition = extractValue(conditionRegex, lines);
-
-        // Concatenate the results and set in the state
-        setOcrDetails(
-          `Last Name, First Name, Middle Name: ${name}\n` +
-          `Nationality: ${nationality}\n` +
-          `Sex: ${sex}\n` +
-          `Date of Birth: ${dob}\n` +
-          `Weight (kg): ${weight}\n` +
-          `Height (m): ${height}\n` +
-          `Address: ${address}\n` +
-          `License No.: ${licenseNo}\n` +
-          `Expiration Date: ${expirationDate}\n` +
-          `Agency Code: ${agencyCode}\n` +
-          `Blood Type: ${bloodType}\n` +
-          `Eyes Color: ${eyeColor}\n` +
-          `DL Codes: ${dlCodes}\n` +
-          `Condition: ${condition}`
-        );
-      } else {
-        console.error('OCRSpace API response is empty or invalid.');
-      }
+      // Concatenate the formatted values and set in the state
+      setOcrDetails(
+        `Last Name, First Name, Middle Name: ${formattedValues.name}\n` +
+        `Nationality: ${formattedValues.nationality}\n` +
+        `Sex: ${formattedValues.sex}\n` +
+        `Date of Birth: ${formattedValues.dob}\n` +
+        `Weight (kg): ${formattedValues.weight}\n` +
+        `Height (m): ${formattedValues.height}\n` +
+        `Address: ${formattedValues.address}\n` +
+        `License No.: ${formattedValues.licenseNo}\n` +
+        `Expiration Date: ${formattedValues.expirationDate}\n` +
+        `Agency Code: ${formattedValues.agencyCode}\n` +
+        `Blood Type: ${formattedValues.bloodType}\n` +
+        `Eyes Color: ${formattedValues.eyeColor}\n` +
+        `DL Codes: ${formattedValues.dlCodes}\n` +
+        `Condition: ${formattedValues.condition}`
+      );
     } catch (err) {
       console.error(err);
       setOcrDetails('');
@@ -113,9 +95,52 @@ export default function HomePage({ onPress }) {
     setIsLoading(false);
   };
 
-  const extractValue = (regex, lines) => {
-    const matchedLine = lines.find((line) => regex.test(line));
-    return matchedLine ? regex.exec(matchedLine)[1].replace(/\n/g, '').trim() : '';
+  const extractValue = (regex, text) => {
+    const match = regex.exec(text);
+    return match && match[1] ? match[1].replace(/\n/g, '').trim() : '';
+  };
+
+  const formatLicenseNo = (licenseNo) => {
+    // Assuming the format is Region Code:Year Code:Sequence Number
+    const [regionCode, yearCode, sequenceNumber] = licenseNo.split('-');
+    return `${regionCode}${yearCode}-${sequenceNumber}`;
+  };
+
+  const formatAgencyCode = (agencyCode) => {
+    // Assuming the agency code format is a single letter followed by two digits
+    return /^[A-Z]\d{2}$/.test(agencyCode) ? agencyCode : 'Not found';
+  };
+
+  const validateDLCodes = (dlCodes) => {
+    // Assuming DL Codes are comma-separated and contain only valid values
+    const validDLCodes = ['A', 'A1', 'B', 'B1', 'B2', 'C', 'D', 'BE', 'CE'];
+    const codes = dlCodes.split(',').map((code) => code.trim());
+    return codes.every((code) => validDLCodes.includes(code));
+  };
+
+  const validateCondition = (condition) => {
+    // Assuming valid conditions are listed
+    const validConditions = [
+      'Restriction 1*',
+      'Restriction 2*',
+      'Restriction 3',
+      'Restriction 4*',
+      'Restriction 5',
+      'Restriction 6',
+      'Restriction 7',
+      'Restriction 8',
+      'A',
+      'A2',
+      'B',
+      'B1',
+      'B2',
+      'C',
+      'D',
+      'BE',
+      'none',
+      'None',
+    ];
+    return validConditions.includes(condition);
   };
 
   const recognizeFromPicker = async (options = defaultPickerOptions) => {
